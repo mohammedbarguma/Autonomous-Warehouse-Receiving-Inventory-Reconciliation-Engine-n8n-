@@ -1,0 +1,759 @@
+{
+  "name": "1 - Ingest documents",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "warehouse-ingest",
+        "options": {}
+      },
+      "name": "Webhook ingest",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        208
+      ],
+      "webhookId": "warehouse-ingest",
+      "id": "20bf3e0f-98d4-4993-8b1a-b4465a36328a"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate one or many records and shape them to match the sheet headers.\nconst REQUIRED = {\n  PO:       ['po_number', 'supplier_id', 'internal_sku', 'ordered_qty', 'unit_price'],\n  DELIVERY: ['po_number', 'supplier_id', 'supplier_sku_raw', 'delivered_qty'],\n  SCAN:     ['po_number', 'scanned_sku_raw', 'good_qty'],\n  INVOICE:  ['po_number', 'supplier_id', 'supplier_sku_raw', 'invoiced_qty', 'unit_price'],\n};\nconst PREFIX = { PO: 'L', DELIVERY: 'D', SCAN: 'SC', INVOICE: 'INV' };\nconst NUMERIC = ['ordered_qty', 'delivered_qty', 'good_qty', 'damaged_qty', 'invoiced_qty', 'unit_price'];\n\nconst body = $input.first().json.body ?? $input.first().json;\nconst docType = String(body.doc_type ?? '').trim().toUpperCase();\nif (!REQUIRED[docType]) {\n  throw new Error(`Invalid doc_type \"${body.doc_type}\". Use PO, DELIVERY, SCAN or INVOICE.`);\n}\n\n// Accept a single record or {doc_type, rows: [...]}\nconst rows = Array.isArray(body.rows) ? body.rows : [body];\nconst today = new Date().toISOString().slice(0, 10);\nconst stamp = Date.now();\nconst out = [];\n\nrows.forEach((raw, i) => {\n  const rec = { ...raw };\n  delete rec.doc_type;\n  const missing = REQUIRED[docType].filter(f => rec[f] === undefined || rec[f] === null || rec[f] === '');\n  if (missing.length) {\n    throw new Error(`${docType} row ${i + 1} is missing: ${missing.join(', ')}`);\n  }\n  for (const f of NUMERIC) {\n    if (rec[f] !== undefined && rec[f] !== '') {\n      const n = Number(rec[f]);\n      if (Number.isNaN(n) || n < 0) throw new Error(`${docType} row ${i + 1}: ${f} must be a non-negative number`);\n      rec[f] = n;\n    }\n  }\n  rec.po_number = String(rec.po_number).trim().toUpperCase();\n\n  // Defaults per document type\n  const id = `${PREFIX[docType]}-${stamp}-${i + 1}`;\n  if (docType === 'PO') {\n    rec.line_id = rec.line_id || id;\n    rec.created_at = rec.created_at || today;\n  } else if (docType === 'DELIVERY') {\n    rec.delivery_id = rec.delivery_id || id;\n    rec.delivery_date = rec.delivery_date || today;\n  } else if (docType === 'SCAN') {\n    rec.scan_id = rec.scan_id || id;\n    rec.damaged_qty = rec.damaged_qty ?? 0;\n    rec.scan_date = rec.scan_date || today;\n    rec.scanned_by = rec.scanned_by || 'unknown';\n  } else if (docType === 'INVOICE') {\n    rec.invoice_id = rec.invoice_id || id;\n    rec.invoice_date = rec.invoice_date || today;\n  }\n  rec.status = 'pending';\n  out.push({ json: { doc_type: docType, ...rec } });\n});\n\nreturn out;\n"
+      },
+      "name": "Validate and shape",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        208
+      ],
+      "id": "decfcf1d-e208-4e59-99aa-9dc252724d78"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.doc_type }}",
+                    "rightValue": "PO",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PO"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.doc_type }}",
+                    "rightValue": "DELIVERY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "DELIVERY"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.doc_type }}",
+                    "rightValue": "SCAN",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SCAN"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.doc_type }}",
+                    "rightValue": "INVOICE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "INVOICE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Route by doc_type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -624,
+        176
+      ],
+      "id": "533b7c2b-f7ab-40b4-ba3d-b566979f3ce5"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE",
+          "mode": "list",
+          "cachedResultName": "warehouse_reconciliation_engine",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1416779300,
+          "mode": "list",
+          "cachedResultName": "Purchase_Orders",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit#gid=1416779300"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "po_number": "={{ $json.po_number }}",
+            "line_id": "={{ $json.line_id }}",
+            "supplier_id": "={{ $json.supplier_id }}",
+            "internal_sku": "={{ $json.internal_sku }}",
+            "description": "={{ $json.description }}",
+            "ordered_qty": "={{ $json.ordered_qty }}",
+            "unit_price": "={{ $json.unit_price }}",
+            "status": "={{ $json.status }}",
+            "created_at": "={{ $json.created_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "line_id",
+              "displayName": "line_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "po_number",
+              "displayName": "po_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "supplier_id",
+              "displayName": "supplier_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "internal_sku",
+              "displayName": "internal_sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ordered_qty",
+              "displayName": "ordered_qty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "unit_price",
+              "displayName": "unit_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "target",
+              "displayName": "target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Append Purchase_Orders",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -336,
+        -48
+      ],
+      "id": "7d7e4368-b88b-4cb1-a3e1-8d5b3e3890eb",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "aY080SykLsw47uuX",
+          "name": "Google Sheets account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE",
+          "mode": "list",
+          "cachedResultName": "warehouse_reconciliation_engine",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1269383701,
+          "mode": "list",
+          "cachedResultName": "Deliveries",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit#gid=1269383701"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "delivery_id": "={{ $json.delivery_id }}",
+            "po_number": "={{ $json.po_number }}",
+            "supplier_id": "={{ $json.supplier_id }}",
+            "supplier_sku_raw": "={{ $json.supplier_sku_raw }}",
+            "delivered_qty": "={{ $json.delivered_qty }}",
+            "delivery_date": "={{ $json.delivery_date }}",
+            "status": "={{ $json.status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "delivery_id",
+              "displayName": "delivery_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "po_number",
+              "displayName": "po_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "supplier_id",
+              "displayName": "supplier_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "supplier_sku_raw",
+              "displayName": "supplier_sku_raw",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "delivered_qty",
+              "displayName": "delivered_qty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "delivery_date",
+              "displayName": "delivery_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "target",
+              "displayName": "target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Append Deliveries",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -336,
+        128
+      ],
+      "id": "b8ead7b2-dd45-4c4f-af02-f0408872bfd7",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "aY080SykLsw47uuX",
+          "name": "Google Sheets account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE",
+          "mode": "list",
+          "cachedResultName": "warehouse_reconciliation_engine",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1526289202,
+          "mode": "list",
+          "cachedResultName": "Warehouse_Scans",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit#gid=1526289202"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "scan_id": "={{ $json.scan_id }}",
+            "po_number": "={{ $json.po_number }}",
+            "scanned_sku_raw": "={{ $json.scanned_sku_raw }}",
+            "good_qty": "={{ $json.good_qty }}",
+            "damaged_qty": "={{ $json.damaged_qty }}",
+            "scan_date": "={{ $json.scan_date }}",
+            "scanned_by": "={{ $json.scanned_by }}",
+            "status": "={{ $json.status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "scan_id",
+              "displayName": "scan_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "po_number",
+              "displayName": "po_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scanned_sku_raw",
+              "displayName": "scanned_sku_raw",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "good_qty",
+              "displayName": "good_qty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "damaged_qty",
+              "displayName": "damaged_qty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scan_date",
+              "displayName": "scan_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scanned_by",
+              "displayName": "scanned_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "target",
+              "displayName": "target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Append Warehouse_Scans",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -336,
+        288
+      ],
+      "id": "2662e3a1-37a6-4f98-b7ff-1d0ec0c313d3",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "aY080SykLsw47uuX",
+          "name": "Google Sheets account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE",
+          "mode": "list",
+          "cachedResultName": "warehouse_reconciliation_engine",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1749367123,
+          "mode": "list",
+          "cachedResultName": "Invoices",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit#gid=1749367123"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "invoice_id": "={{ $json.invoice_id }}",
+            "po_number": "={{ $json.po_number }}",
+            "supplier_id": "={{ $json.supplier_id }}",
+            "supplier_sku_raw": "={{ $json.supplier_sku_raw }}",
+            "invoiced_qty": "={{ $json.invoiced_qty }}",
+            "unit_price": "={{ $json.unit_price }}",
+            "invoice_date": "={{ $json.invoice_date }}",
+            "status": "={{ $json.status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "invoice_id",
+              "displayName": "invoice_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "po_number",
+              "displayName": "po_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "supplier_id",
+              "displayName": "supplier_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "supplier_sku_raw",
+              "displayName": "supplier_sku_raw",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invoiced_qty",
+              "displayName": "invoiced_qty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "unit_price",
+              "displayName": "unit_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invoice_date",
+              "displayName": "invoice_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "target",
+              "displayName": "target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Append Invoices",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -336,
+        480
+      ],
+      "id": "3e6800d7-b595-4f45-bca8-3fb83d5d0614",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "aY080SykLsw47uuX",
+          "name": "Google Sheets account 3"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook ingest": {
+      "main": [
+        [
+          {
+            "node": "Validate and shape",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and shape": {
+      "main": [
+        [
+          {
+            "node": "Route by doc_type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by doc_type": {
+      "main": [
+        [
+          {
+            "node": "Append Purchase_Orders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append Deliveries",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append Warehouse_Scans",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "f47e65f9-6698-446c-a327-feeec2a13612",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0bddefa8c571199c6715ce068dfab617dd500f5c60fa6986680c94e31433ad1e"
+  },
+  "nodeGroups": [],
+  "id": "bMPvzzui2opBLgiv",
+  "tags": []
+}

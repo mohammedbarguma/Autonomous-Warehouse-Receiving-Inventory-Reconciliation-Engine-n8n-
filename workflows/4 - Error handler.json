@@ -1,0 +1,258 @@
+{
+  "name": "4 - Error handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        128
+      ],
+      "id": "d16a25ed-94ee-4ee4-bf47-2416f94e7b2b"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalise the Error Trigger payload into one record for the alert and the log.\n// Execution errors carry `execution`; errors in a trigger node carry `trigger` instead.\nconst e = $input.first().json;\nconst exec = e.execution ?? {};\nconst trig = e.trigger ?? {};\nconst err  = exec.error ?? trig.error ?? {};\nconst ts   = new Date().toISOString();\n\nconst workflowName = e.workflow?.name ?? 'unknown workflow';\nconst failedNode   = exec.lastNodeExecuted ?? err.node?.name ?? trig.error?.node?.name ?? 'unknown node';\nconst message      = String(err.message ?? 'No error message supplied').slice(0, 500);\n\n// Did the node exhaust its retries, or is this already a manual retry of a failed run?\nconst isRetryOfEarlier = Boolean(exec.retryOf);\n\nreturn [{ json: {\n  log_id: `LOG-${Date.now()}-ERR`,\n  timestamp: ts,\n  po_number: '',\n  internal_sku: '',\n  event: 'WORKFLOW_ERROR',\n  actor: 'n8n:error-handler',\n  old_value: workflowName,\n  new_value: failedNode,\n  details: JSON.stringify({\n    workflow_id: e.workflow?.id ?? '',\n    execution_id: exec.id ?? '',\n    execution_url: exec.url ?? '',\n    mode: exec.mode ?? trig.mode ?? '',\n    retry_of: exec.retryOf ?? '',\n    message,\n  }),\n  // fields used only by the email, not written to the sheet\n  _workflow: workflowName,\n  _node: failedNode,\n  _message: message,\n  _url: exec.url ?? '(trigger failed before an execution was created)',\n  _repeat: isRetryOfEarlier,\n} }];\n"
+      },
+      "name": "Shape error record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -288,
+        128
+      ],
+      "id": "65c9e34a-87d5-443a-984d-4ec4491fc04c"
+    },
+    {
+      "parameters": {
+        "sendTo": "mbargumajajere126@gmail.com",
+        "subject": "={{ $json._repeat ? '[REPEAT] ' : '' }}Warehouse automation failed: {{ $json._workflow }}",
+        "emailType": "text",
+        "message": "=Workflow: {{ $json._workflow }}\nFailed node: {{ $json._node }}\nTime (UTC): {{ $json.timestamp }}\n\nError:\n{{ $json._message }}\n\nOpen the execution to inspect and retry:\n{{ $json._url }}\n\nThe node has already been retried automatically before this alert was sent. Records involved remain in 'pending' status and will be picked up again on the next scheduled run once the cause is fixed.",
+        "options": {}
+      },
+      "name": "Alert admin",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3bd59e1b-f39a-4ba9-acb4-7b7320d8ac13",
+      "webhookId": "762d7e91-1123-429c-8e7c-4cbe6f38cbed",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ULfhUfr2eWNFUbzw",
+          "name": "Gmail account 3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keep only the Audit_Log columns so no helper fields leak into the sheet\nconst keep = ['log_id','timestamp','po_number','internal_sku','event','actor','old_value','new_value','details'];\nreturn $input.all().map(i => ({ json: Object.fromEntries(keep.map(k => [k, i.json[k] ?? ''])) }));\n"
+      },
+      "name": "Audit_Log columns only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        240
+      ],
+      "id": "56073749-c3b4-4426-bb76-cedf33232b45"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE",
+          "mode": "list",
+          "cachedResultName": "warehouse_reconciliation_engine",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1963676897,
+          "mode": "list",
+          "cachedResultName": "Audit_Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oAovDXKyUC-QPfuHRvW2-dG3OQ6g55V535HoYJkgkBE/edit#gid=1963676897"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "log_id",
+              "displayName": "log_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "po_number",
+              "displayName": "po_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "internal_sku",
+              "displayName": "internal_sku",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "event",
+              "displayName": "event",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "actor",
+              "displayName": "actor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "old_value",
+              "displayName": "old_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "new_value",
+              "displayName": "new_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "details",
+              "displayName": "details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "target",
+              "displayName": "target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Append Audit_Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        272,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "id": "eebdbb12-0601-4434-a413-2fbf1235ae5e",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "aY080SykLsw47uuX",
+          "name": "Google Sheets account 3"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Shape error record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape error record": {
+      "main": [
+        [
+          {
+            "node": "Alert admin",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit_Log columns only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit_Log columns only": {
+      "main": [
+        [
+          {
+            "node": "Append Audit_Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7ae2cd26-34f5-4c9c-bf30-f99ca2fae453",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0bddefa8c571199c6715ce068dfab617dd500f5c60fa6986680c94e31433ad1e"
+  },
+  "nodeGroups": [],
+  "id": "eFEOck0EZh82lQ3L",
+  "tags": []
+}

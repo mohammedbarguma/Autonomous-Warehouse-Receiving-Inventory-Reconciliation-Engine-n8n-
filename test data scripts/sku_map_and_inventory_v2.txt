@@ -1,0 +1,15 @@
+ADD THESE ROWS (keep any existing rows). Paste into row 2 onwards of each tab; columns separated by tabs.
+
+SKU_Map  (headers: supplier_id | supplier_sku_clean | internal_sku)
+SUP-KANO	KN7741B	INV-RICE-50KG
+SUP-KANO	KN7742A	INV-SUGAR-1KG
+SUP-LAGOS	LG5520	INV-OIL-5L
+SUP-LAGOS	LG5531	INV-SOAP-BAR
+SUP-ENUGU	EN8800X	INV-FLOUR-10KG
+
+Inventory  (internal_sku | on_hand) - starting values for the test
+INV-RICE-50KG	15
+INV-OIL-5L	0
+INV-SUGAR-1KG	0
+INV-SOAP-BAR	0
+INV-FLOUR-10KG	0

@@ -1,0 +1,23 @@
+[
+  {
+    "po_number": "PO-TEST-001", "line_id": "L-TEST-001", "internal_sku": "SKU-A", "supplier_id": "SUP-01",
+    "unit_price": 250, "ordered_qty": 100, "delivered_qty": 100,
+    "scanned_good_qty": 92, "scanned_damaged_qty": 8, "invoiced_qty": 100,
+    "categories": ["damage", "over_billing"], "claim_amount": 2000,
+    "unmapped_codes": [], "mismatched_codes": []
+  },
+  {
+    "po_number": "PO-TEST-002", "line_id": "L-TEST-002", "internal_sku": "SKU-B", "supplier_id": "SUP-01",
+    "unit_price": 1200, "ordered_qty": 50, "delivered_qty": 40,
+    "scanned_good_qty": 40, "scanned_damaged_qty": 0, "invoiced_qty": 40,
+    "categories": ["under_shipment"], "claim_amount": 12000,
+    "unmapped_codes": [], "mismatched_codes": []
+  },
+  {
+    "po_number": "PO-TEST-003", "line_id": "L-TEST-003", "internal_sku": "SKU-C", "supplier_id": "SUP-02",
+    "unit_price": 80, "ordered_qty": 200, "delivered_qty": 0,
+    "scanned_good_qty": 0, "scanned_damaged_qty": 0, "invoiced_qty": 0,
+    "categories": ["unmapped_sku"], "claim_amount": 0,
+    "unmapped_codes": ["XJ-44/b"], "mismatched_codes": []
+  }
+]
