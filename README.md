@@ -157,9 +157,3 @@ Result: 5 failed Workflow 1 runs, 5 Workflow 4 runs, 5 alert emails to the admin
 - Approval emails have no timeout.
 - Audit rows do not yet include the n8n execution ID or a payload hash.
 - Google Sheets limits throughput; production use should move the data to PostgreSQL or Supabase.
-
----
-
-## Team
-
-See [TEAM_MEMBERS.md](TEAM_MEMBERS.md).
